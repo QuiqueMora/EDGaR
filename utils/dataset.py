@@ -121,10 +121,10 @@ class GazeImages_forUNet(Dataset):
             # With 18 cameras only the picture of the first
             imgages = subject['face_patch']
             gazes = subject['face_gaze']
-            image_start = torch.from_numpy(imgages[0::18][start_idx]).float()/255.0
-            label_start = torch.from_numpy(gazes[0::18][start_idx]).float()
-            image_target = torch.from_numpy(imgages[0::18][target_idx]).float()/255.0
-            label_target = torch.from_numpy(gazes[0::18][target_idx]).float()
+            image_start = torch.from_numpy(imgages[18*start_idx]).float()/255.0
+            label_start = torch.from_numpy(gazes[18*start_idx]).float()
+            image_target = torch.from_numpy(imgages[18*target_idx]).float()/255.0
+            label_target = torch.from_numpy(gazes[18*target_idx]).float()
 
         # Images are stored in W x H x C
         # but torch expects C x W x H
