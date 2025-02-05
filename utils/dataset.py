@@ -50,7 +50,41 @@ def normalize_images(images):
     ])
     return transform(images)
 
-class GazeImages(Dataset):
+def inv_normalize_images(images):
+    """
+    Normalize image for ResNet to the range [0, 1]
+    with: 
+    mean=[0.485, 0.456, 0.406] 
+    std=[0.229, 0.224, 0.225]
+    """
+    # Normalize image for ResNet
+    # with: 
+    mean=[0.485, 0.456, 0.406] 
+    std=[0.229, 0.224, 0.225]
+    transform = transforms.Compose([
+        transforms.Normalize(mean=[0., 0., 0.],
+                             std =[1/0.229, 1/0.224, 1/0.225]),
+        transforms.Normalize(mean=[-0.485, -0.456, -0.406],
+                             std =[1, 1, 1]),
+    ])
+    return transform(images)
+
+# class GazeImages(Dataset):
+#     def __init__(self, normalize: bool = False):
+#         self.images, self.gaze_labels, _ = get_train_data()
+#         if normalize:
+#             self.images = normalize_images(self.images)
+#         return
+#
+#     def __len__(self):
+#         return self.images.shape[0]
+#
+#     def __getitem__(self, idx):
+#         image = self.images[idx, ...]
+#         label = self.gaze_labels[idx, ...]
+#         return image, label 
+
+class GazeImages_forUNet(Dataset):
     def __init__(self, normalize: bool = False):
         self.images, self.gaze_labels = get_train_data()
         if normalize:
