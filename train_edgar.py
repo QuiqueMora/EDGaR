@@ -68,7 +68,7 @@ if __name__ == "__main__":
 
     # split into training and validation set 
     generator = torch.Generator().manual_seed(42)
-    train_set, validation_set = random_split(training_data, [.2, .8], generator=generator)
+    train_set, validation_set = random_split(training_data, [.8, .2], generator=generator)
 
     edgar = unet.unet()
     edgar.load_state_dict(torch.load("29-01-25_07-30-Unet-99-epochs.pth"))
@@ -78,9 +78,9 @@ if __name__ == "__main__":
     optimizer = optim.Adam(edgar.parameters(), lr=1e-3)
 
     ## Do the Training
-    epochs = 400
+    epochs = 200
     batch_size = 20
-    train_dataloader = DataLoader(train_set, batch_size=batch_size)
+    train_dataloader = DataLoader(train_set, batch_size=batch_size, num_workers=4)
     test_dataloader = DataLoader(validation_set, batch_size=batch_size)
     # save time of training
     date = datetime.datetime.today().strftime("%d-%m-%y_%H-%M")
