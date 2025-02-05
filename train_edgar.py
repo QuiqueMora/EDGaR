@@ -59,7 +59,6 @@ def test(dataloader, model, loss_fn):
 
 if __name__ == "__main__":
 
-    # TODO: setup logging
     writer = SummaryWriter()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
