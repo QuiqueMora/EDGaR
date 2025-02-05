@@ -71,7 +71,7 @@ if __name__ == "__main__":
     train_set, validation_set = random_split(training_data, [.8, .2], generator=generator)
 
     edgar = unet.unet()
-    edgar.load_state_dict(torch.load("29-01-25_07-30-Unet-99-epochs.pth"))
+    edgar.load_state_dict(torch.load("29-01-25_L1_continue_pt-2/29-01-25_15-16-Unet-390-epochs.pth"))
 
     # Mean Squared error, because it is a regression task, not classification
     loss_fn = nn.L1Loss()
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     ## Do the Training
     epochs = 200
     batch_size = 20
-    train_dataloader = DataLoader(train_set, batch_size=batch_size, num_workers=4)
+    train_dataloader = DataLoader(train_set, batch_size=batch_size, num_workers=4, pin_memory=True)
     test_dataloader = DataLoader(validation_set, batch_size=batch_size)
     # save time of training
     date = datetime.datetime.today().strftime("%d-%m-%y_%H-%M")
