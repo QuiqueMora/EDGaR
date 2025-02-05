@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.utils.tensorboard import SummaryWriter
 
-writer = SummaryWriter()
 
 class conv_block(nn.Module):
     def __init__(self, in_channels, feat_dim, n_convs=2) -> None:
@@ -61,12 +59,13 @@ class unet(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.e_1 = encoder_block(4, 64) 
+        self.e_1 = encoder_block(3, 64) 
         self.e_2 = encoder_block(64, 128)
         self.e_3 = encoder_block(128, 256)
         self.e_4 = encoder_block(256, 512)
         
-        self.conv = conv_block(512, 1024)
+        # 512 + 2 new channels for gaze target
+        self.conv = conv_block(514, 1024)
 
         self.d_1 = decoder_block(1024, 512) 
         self.d_2 = decoder_block(512, 256)
@@ -74,17 +73,22 @@ class unet(nn.Module):
         self.d_4 = decoder_block(128, 64)
         
         self.last = nn.Conv2d(in_channels=64,
-                              out_channels=3,
+                              out_channels=4,
                               kernel_size=1,
-                              padding=1)
+                              padding=0)
         self.activation = nn.ReLU()
+        self.activation_alpha = nn.Sigmoid()
 
-    def forward(self, input):
-        x, skip_1 = self.e_1(input)
+    # @torch.compile
+    def forward(self, input_img, target_gaze):
+        x, skip_1 = self.e_1(input_img)
         x, skip_2 = self.e_2(x)
         x, skip_3 = self.e_3(x)
         x, skip_4 = self.e_4(x)
 
+        # append gaze to input image as new channels
+        target_gaze = target_gaze.view(-1,2,1,1).expand(-1, 2, 14, 14)
+        x = torch.cat([x, target_gaze], dim=1)
         x = self.conv(x)
 
         x = self.d_1(x, skip_4)
@@ -93,14 +97,20 @@ class unet(nn.Module):
         x = self.d_4(x, skip_1)
 
         x = self.last(x)
-        return self.activation(x)
+        # this way it can learn what regions stay the same
+        # by using the alpha channel to safe parts
+        alpha = self.activation_alpha(x[:, 3:4, ...] )
+        color = self.activation(x[:, :3, ...])
+
+        return alpha * input_img + (1-alpha) * color
 
 if __name__ == "__main__":
     device = torch.device("cuda")
     # (batch, channels, height, width)
 
     test = torch.rand((32, 4,256,256),device="cuda")
+    target_gaze = torch.rand((32,2,),device="cuda")
     model = unet().to(device)
     device=torch.device("cuda")
 
-    model(test)
+    model(test, target_gaze)
