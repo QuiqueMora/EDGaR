@@ -104,13 +104,75 @@ class unet(nn.Module):
 
         return alpha * input_img + (1-alpha) * color
 
+class unet_vanilla(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+        self.e_1 = encoder_block(5, 64) 
+        self.e_2 = encoder_block(64, 128)
+        self.e_3 = encoder_block(128, 256)
+        self.e_4 = encoder_block(256, 512)
+        
+        # 512 + 2 new channels for gaze target
+        self.conv = conv_block(512, 1024)
+
+        self.d_1 = decoder_block(1024, 512) 
+        self.d_2 = decoder_block(512, 256)
+        self.d_3 = decoder_block(256, 128)
+        self.d_4 = decoder_block(128, 64)
+        
+        self.last = nn.Conv2d(in_channels=64,
+                              out_channels=4,
+                              kernel_size=1,
+                              padding=0)
+        self.activation = nn.ReLU()
+        self.activation_alpha = nn.Sigmoid()
+
+    # @torch.compile
+    def forward(self, input_img, target_gaze):
+        # extract height and width
+        # input_img shape is (B, C, H, W)
+        h,w = input_img.shape[-2:]
+        # expand 2D gaze to size of image
+        target_gaze = target_gaze.view(-1, 2,1,1).expand(-1, 2,h,w)
+        # append gaze direction as new channel 
+        input = torch.cat((input_img, target_gaze), dim=1)
+
+        x, skip_1 = self.e_1(input)
+        x, skip_2 = self.e_2(x)
+        x, skip_3 = self.e_3(x)
+        x, skip_4 = self.e_4(x)
+
+        # append gaze to input image as new channels
+        x = self.conv(x)
+
+        x = self.d_1(x, skip_4)
+        x = self.d_2(x, skip_3)
+        x = self.d_3(x, skip_2)
+        x = self.d_4(x, skip_1)
+
+        x = self.last(x)
+        # this way it can learn what regions stay the same
+        # by using the alpha channel to safe parts
+        alpha = self.activation_alpha(x[:, 3:4, ...] )
+        color = self.activation(x[:, :3, ...])
+
+        return alpha * input_img + (1-alpha) * color, alpha
+
 if __name__ == "__main__":
     device = torch.device("cuda")
     # (batch, channels, height, width)
 
-    test = torch.rand((32, 4,256,256),device="cuda")
-    target_gaze = torch.rand((32,2,),device="cuda")
-    model = unet().to(device)
+    batch = 10
+    size= 224
+    model = unet_vanilla().to(device)
     device=torch.device("cuda")
-
-    model(test, target_gaze)
+    for i in range(300):
+        test = torch.rand((batch, 3, size+i, size+i),device="cuda")
+        target_gaze = torch.rand((batch,2,),device="cuda")
+        try:
+            model(test, target_gaze)
+            print(size+i, "works")
+        except:
+            continue
