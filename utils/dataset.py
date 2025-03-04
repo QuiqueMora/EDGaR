@@ -3,8 +3,9 @@ import pickle
 from tqdm import tqdm
 import h5py
 import json
+import torch.nn.functional as FN
 import torchvision.transforms.v2.functional as F
-from torchvision.transforms.v2 import GaussianBlur, RandomCrop, ColorJitter, GaussianNoise
+from torchvision.transforms.v2 import GaussianBlur, RandomCrop, ColorJitter, GaussianNoise, RandomResizedCrop
 from itertools import combinations_with_replacement
 import torch
 
@@ -94,6 +95,25 @@ def inv_normalize_images(images):
 #         image = self.images[idx, ...]
 #         label = self.gaze_labels[idx, ...]
 #         return image, label 
+def dilate_mask(mask, kernel_size=3):
+    """Dilate a binary mask using PyTorch."""
+    # Create a dilation kernel (structuring element)
+    kernel = torch.ones((1, 1, kernel_size, kernel_size), device=mask.device)
+    
+    # Add batch and channel dimensions if necessary
+    if mask.dim() == 2:
+        mask = mask.unsqueeze(0).unsqueeze(0)  # (1, 1, H, W)
+    elif mask.dim() == 3:
+        mask = mask.unsqueeze(1)  # (B, 1, H, W)
+
+    # Apply max pooling as a morphological dilation operation
+    dilated_mask = FN.max_pool2d(mask.float(), kernel_size, stride=1, padding=kernel_size // 2)
+
+    return dilated_mask.squeeze()  # Remove extra dimensions
+def downsample_image(image, size=(224,224)):
+    # Add batch and channel dimensions if necessary
+    image = image.unsqueeze(0)
+    return FN.interpolate(image, size=size, mode='bilinear', align_corners=False).squeeze(0)
 
 class same_color_jitter():
     def __init__(self, order: torch.Tensor, brightness, contrast, saturation, hue):
@@ -117,12 +137,13 @@ class same_color_jitter():
         return img
 
 class GazeImages_forUNet_pre_pro(Dataset):
-    def __init__(self, normalize: bool = False, train = True, augmentation = True, heatmap = False, path_to_xgaze = "../Datasets/xgaze_set/"):
+    def __init__(self, normalize: bool = False, train = True, augmentation = True, heatmap = False, size = None, path_to_xgaze = "../Datasets/eth_set/"):
         # self.images, self.gaze_labels, self.subject_index = get_train_data()
 
         self.augmentation = augmentation
         self.heatmap = heatmap
         self.train = train
+        self.size = size
         self.normalize = normalize
         self.path_to_xgaze = path_to_xgaze
 
@@ -163,10 +184,11 @@ class GazeImages_forUNet_pre_pro(Dataset):
         # combine images, along channels in order to have the same transform
             combined = torch.cat((image_start, image_target, mask.expand(1, -1, -1)), dim=0)
             # spacial augmentation
-            crop = RandomCrop(size=432)(combined)
+            # crop = RandomCrop(size=432)(combined)
+            crop = RandomResizedCrop(size=224, ratio=[1,1], scale=[.35,1.0])(combined)
 
             # color augmentation TODO augmentation for brightness
-            generator = ColorJitter(brightness=.7, hue=.5)
+            generator = ColorJitter(brightness=0.0, hue=.3)
             color = same_color_jitter(*ColorJitter.get_params(generator.brightness, generator.contrast, generator.saturation,generator.hue))
 
             image_start = color(crop[0:3,...])
@@ -176,9 +198,20 @@ class GazeImages_forUNet_pre_pro(Dataset):
             noise = torch.rand_like(image_start)*.1
             image_start = torch.clamp(image_start + noise, 0, 1)
             image_target = torch.clamp(image_target + noise, 0, 1)
+            #todo maby make smaller for faster training
+            # image_start = downsample_image(image_start, size=(224,224))
+            # image_target = downsample_image(image_target, size=(224,224))
+            # mask = downsample_image(mask, size=(224,224))
 
         if self.heatmap:
-            mask = GaussianBlur(kernel_size=(201,103), sigma = 20.9)(mask)
+            # todo: großmachen (erode/dilate)
+            # Todo dann bluren mit normalisiertem kernel
+            mask = dilate_mask(mask.int(),kernel_size=19).float()
+            mask = mask.unsqueeze(0)
+            mask = GaussianBlur(kernel_size=39, sigma = 9)(mask.float())
+            mask /= torch.max(mask)
+
+
         # Normalize images
         if self.normalize:
             image_start = normalize_images(image_start)
